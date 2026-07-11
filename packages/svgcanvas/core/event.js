@@ -159,10 +159,16 @@ const mouseMoveEvent = (evt) => {
           svgCanvas.dragStartTransforms.set(selectedElement, selectedElement.getAttribute('transform') || '')
           const slist = getTransformList(selectedElement)
           if (!slist) { continue }
+          // The dummy must already be a translate (not the default identity
+          // matrix) so updateTransformList's `firstItem.type === 2` check
+          // recognizes and replaces it in place on the very first mousemove,
+          // instead of leaving it behind as a stray extra transform item.
+          const dummy = svgRoot.createSVGTransform()
+          dummy.setTranslate(0, 0)
           if (slist.numberOfItems) {
-            slist.insertItemBefore(svgRoot.createSVGTransform(), 0)
+            slist.insertItemBefore(dummy, 0)
           } else {
-            slist.appendItem(svgRoot.createSVGTransform())
+            slist.appendItem(dummy)
           }
         }
         svgCanvas.hasDragStartTransform = true
@@ -685,8 +691,14 @@ const mouseUpEvent = (evt) => {
             const tlist = getTransformList(elem)
             if (!tlist || tlist.numberOfItems === 0) return
 
-            // Get the transform from BEFORE the drag started
-            const oldTransform = svgCanvas.dragStartTransforms?.get(elem) || ''
+            // Get the transform from BEFORE this interaction started. `dragStartTransforms`
+            // is only populated for 'select'-mode (move) drags; 'resize'/'rotate' drags fall
+            // through to this same code with dragStartTransforms left null, so fall back to
+            // the value captured at mousedown via setStartTransform, which correctly reflects
+            // the prior transform (e.g. a matrix left by an earlier move) regardless of mode.
+            const oldTransform = svgCanvas.dragStartTransforms?.has(elem)
+              ? svgCanvas.dragStartTransforms.get(elem)
+              : (svgCanvas.getStartTransform() || '')
 
             // Check if the first transform is a translate (the drag transform we added)
             const firstTransform = tlist.getItem(0)
